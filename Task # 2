@@ -1,0 +1,131 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+import re
+import nltk
+import warnings
+
+# Suppress warnings
+warnings.filterwarnings('ignore')
+
+print("=== Starting Sentiment Analysis ===")
+
+# Download NLTK data
+nltk.download(['punkt', 'stopwords', 'wordnet', 'omw-1.4'], quiet=True)
+
+# Create a more substantial fallback dataset
+def create_fallback_data():
+    positive_samples = [
+        "This movie was absolutely wonderful!",
+        "I loved every minute of this film.",
+        "The acting was superb and the story captivating.",
+        "One of the best movies I've seen this year.",
+        "Highly recommend this to all movie lovers.",
+        "The cinematography was breathtaking.",
+        "A masterpiece of modern cinema.",
+        "The director did an excellent job.",
+        "I was completely immersed from start to finish.",
+        "Perfect score from me!"
+    ]
+    
+    negative_samples = [
+        "This was the worst movie I've ever seen.",
+        "Complete waste of time and money.",
+        "I can't believe how bad this was.",
+        "The acting was terrible and the plot made no sense.",
+        "I walked out after 30 minutes.",
+        "Avoid this movie at all costs.",
+        "Painfully boring and unoriginal.",
+        "The worst two hours of my life.",
+        "I want my money back.",
+        "How did this get made?"
+    ]
+    
+    return pd.DataFrame({
+        'review': positive_samples + negative_samples,
+        'sentiment': [1]*len(positive_samples) + [0]*len(negative_samples)
+    })
+
+# Load dataset
+print("\nLoading dataset...")
+try:
+    df = pd.read_csv('imdb_reviews.csv')
+    print("Loaded IMDB dataset from CSV")
+except Exception as e:
+    print(f"Could not load CSV: {str(e)}")
+    print("Using built-in fallback dataset")
+    df = create_fallback_data()
+    print(f"Created dataset with {len(df)} samples")
+
+# Text preprocessing
+def preprocess_text(text):
+    text = str(text).lower()
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    tokens = word_tokenize(text)
+    stop_words = set(stopwords.words('english'))
+    tokens = [word for word in tokens if word not in stop_words]
+    lemmatizer = WordNetLemmatizer()
+    tokens = [lemmatizer.lemmatize(word) for word in tokens]
+    return ' '.join(tokens)
+
+print("\nPreprocessing text...")
+df['processed_review'] = df['review'].apply(preprocess_text)
+
+# Feature engineering
+print("\nCreating features...")
+tfidf = TfidfVectorizer(max_features=1000)
+X = tfidf.fit_transform(df['processed_review'])
+y = df['sentiment'].values
+
+# Split data (removed stratify for small datasets)
+print("\nSplitting data...")
+test_size = 0.2 if len(df) >= 10 else 0.3  # Adjust for very small datasets
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, 
+    test_size=test_size, 
+    random_state=42
+)
+print(f"Train: {X_train.shape[0]} samples, Test: {X_test.shape[0]} samples")
+
+# Model training
+print("\nTraining model...")
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train, y_train)
+
+# Evaluation
+print("\nEvaluating...")
+y_pred = model.predict(X_test)
+print(f"Accuracy: {accuracy_score(y_test, y_pred):.2f}")
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred, zero_division=0))
+
+# Prediction function
+def predict_sentiment(text):
+    processed = preprocess_text(text)
+    vector = tfidf.transform([processed])
+    pred = model.predict(vector)[0]
+    return "Positive" if pred == 1 else "Negative"
+
+# Interactive loop
+print("\n=== Ready for predictions ===")
+print("Type a review or 'quit' to exit\n")
+while True:
+    try:
+        text = input("Enter review: ").strip()
+        if text.lower() == 'quit':
+            break
+        if not text:
+            continue
+        print("Sentiment:", predict_sentiment(text))
+    except KeyboardInterrupt:
+        break
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+print("\nProgram ended.")
