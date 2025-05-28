@@ -1,3 +1,4 @@
+DataScince Intern Work
 Task 1: EDA and Visualization
 Dataset Used: Titanic Dataset / Airbnb Listings Dataset
 Goal: Explore the data, clean it, and visualize key patterns.
