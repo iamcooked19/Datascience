@@ -1,0 +1,127 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+import warnings
+warnings.filterwarnings('ignore')
+
+def generate_credit_card_data(num_samples=10000, fraud_ratio=0.01):
+    """Generate synthetic credit card transaction data"""
+    np.random.seed(42)
+    
+    # Generate normal transactions
+    normal_samples = int(num_samples * (1 - fraud_ratio))
+    fraud_samples = num_samples - normal_samples
+    
+    # Features V1-V28 (PCA components in real dataset)
+    normal_data = np.random.randn(normal_samples, 28) * 1.0
+    fraud_data = np.random.randn(fraud_samples, 28) * 1.0 + 2.5  # Fraud patterns differ
+    
+    # Amounts (normal distribution with some outliers)
+    normal_amounts = np.abs(np.random.normal(50, 20, normal_samples))
+    fraud_amounts = np.abs(np.random.normal(150, 100, fraud_samples))
+    
+    # Combine data
+    X = np.vstack([normal_data, fraud_data])
+    amounts = np.concatenate([normal_amounts, fraud_amounts])
+    y = np.array([0]*normal_samples + [1]*fraud_samples)
+    
+    # Create DataFrame
+    columns = [f'V{i}' for i in range(1, 29)] + ['Amount', 'Class']
+    data = np.hstack([X, amounts.reshape(-1, 1), y.reshape(-1, 1)])
+    df = pd.DataFrame(data, columns=columns)
+    
+    return df
+
+def preprocess_data(df):
+    """Normalize amounts and drop unnecessary columns"""
+    scaler = StandardScaler()
+    df['Amount'] = scaler.fit_transform(df[['Amount']])
+    return df, scaler
+
+def train_model(X_train, y_train):
+    """Train Random Forest classifier"""
+    model = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=10,
+        class_weight='balanced',
+        random_state=42,
+        n_jobs=-1
+    )
+    model.fit(X_train, y_train)
+    return model
+
+def evaluate_model(model, X_test, y_test):
+    """Evaluate model performance"""
+    y_pred = model.predict(X_test)
+    print("\nEvaluation Metrics:")
+    print(classification_report(y_test, y_pred))
+    print("\nConfusion Matrix:")
+    print(confusion_matrix(y_test, y_pred))
+
+def test_transaction_interactively(model, scaler):
+    """Interactive testing interface"""
+    print("\n=== Transaction Testing ===")
+    print("Enter transaction details (or 'quit' to exit)")
+    print("Note: We'll generate realistic values for V1-V28 features")
+    
+    while True:
+        try:
+            user_input = input("\nEnter transaction amount: $")
+            if user_input.lower() == 'quit':
+                break
+            
+            amount = float(user_input)
+            
+            # Generate realistic features
+            if amount < 100:  # More likely legitimate
+                features = np.random.randn(28) * 0.8
+            else:  # More likely fraud
+                features = np.random.randn(28) * 0.8 + 1.5
+            
+            # Scale amount
+            scaled_amount = scaler.transform([[amount]])[0][0]
+            
+            # Create transaction vector
+            transaction = np.append(features, scaled_amount).reshape(1, -1)
+            
+            # Predict
+            proba = model.predict_proba(transaction)[0][1]
+            status = "FRAUD" if proba > 0.5 else "LEGITIMATE"
+            
+            print(f"\nTransaction Amount: ${amount:.2f}")
+            print(f"Status: {status}")
+            print(f"Fraud Probability: {proba:.4f}")
+            
+        except ValueError:
+            print("Please enter a valid amount or 'quit'")
+
+def main():
+    print("=== Synthetic Credit Card Fraud Detection ===")
+    
+    # Generate and preprocess data
+    print("\nGenerating synthetic transaction data...")
+    df, scaler = preprocess_data(generate_credit_card_data())
+    
+    # Split data
+    X = df.drop('Class', axis=1)
+    y = df['Class']
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.3, random_state=42, stratify=y
+    )
+    
+    # Train model
+    print("\nTraining Random Forest model...")
+    model = train_model(X_train, y_train)
+    
+    # Evaluate
+    print("\nModel Evaluation:")
+    evaluate_model(model, X_test, y_test)
+    
+    # Interactive testing
+    test_transaction_interactively(model, scaler)
+
+if __name__ == "__main__":
+    main()
